@@ -7,6 +7,8 @@ from sklearn.metrics import mean_squared_error
 from sklearn.feature_selection import RFE
 from sklearn import ensemble
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.datasets import make_regression
 import math
 import pickle
 
@@ -64,6 +66,13 @@ def linear_reg(X_train,Y_train):
     lm.fit(X_train, Y_train)
     print("done training using linear regressor...")
     return lm
+
+
+def random_forest(X_train,Y_train):
+    forest_reg = RandomForestRegressor(random_state=42)
+    forest_reg.fit(X_train, Y_train)
+    print("done training using random forest regressor...")
+    return forest_reg
 
 
 def gd_reg(X_train,Y_train):
@@ -162,11 +171,11 @@ def predict(datafile):
     # print(y_value)
     invoice_data['predicted'] = y_value
     # print(invoice_data)
-    get_predicted_settled_sate(invoice_data)
+    get_predicted_settled_date(invoice_data)
     build_graphs(invoice_data)
 
 
-def get_predicted_settled_sate(invoice_data):
+def get_predicted_settled_date(invoice_data):
 
     invoice_data['predictedDate'] = pd.to_datetime(invoice_data.InvoiceDate) + pd.to_timedelta(pd.np.ceil(invoice_data.predicted),unit="D")
     invoice_data['predictedDate'] = invoice_data['predictedDate'].dt.strftime('%m/%d/%Y')
@@ -178,6 +187,7 @@ def build_graphs(invoice_data):
     invoice_cash=invoice_data[['predictedDate','InvoiceAmount']].copy()
     invoice_cash = invoice_cash.sort_values(by='predictedDate')
     invoice_cash = invoice_cash.assign(sum=invoice_cash.InvoiceAmount.cumsum())
+    invoice_cash['sum']=invoice_cash['sum'].round()
     # print(invoice_cash.head(2))
     invoice_bar=invoice_data[['predicted','invoiceNumber']].copy()
     invoice_bar['ontime'] = np.where(invoice_bar['predicted']<30,1,0)
