@@ -5,10 +5,12 @@ from sklearn import model_selection
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.feature_selection import RFE
+from sklearn import ensemble
+from sklearn.ensemble import GradientBoostingRegressor
 import math
 import pickle
 
-lr_model_file = 'lr_model.sav'
+model_file = 'model.sav'
 model = None
 X_test = None
 Y_test = None
@@ -49,14 +51,26 @@ def train(trainfile):
     seed = 7
     X_train, X_rest, Y_train, Y_rest = model_selection.train_test_split(X, Y, test_size=0.40, random_state=seed)
     X_validation, X_test, Y_validation, Y_test = model_selection.train_test_split(X_rest, Y_rest, test_size=0.50,random_state=seed)
-    lm = LinearRegression()
-    model = lm
-    lm.fit(X_train, Y_train)
-    print("done training...")
-    model_stats(lm,X_validation,Y_validation)
-    pickle.dump(lm, open(lr_model_file, 'wb'))
+    # model = linear_reg(X_train,Y_train)
+    model = gd_reg(X_train, Y_train)
+    model_stats(model,X_validation,Y_validation)
+    pickle.dump(model, open(model_file, 'wb'))
     print("model saved")
+    return model
+
+
+def linear_reg(X_train,Y_train):
+    lm = LinearRegression()
+    lm.fit(X_train, Y_train)
+    print("done training using linear regressor...")
     return lm
+
+
+def gd_reg(X_train,Y_train):
+    gd = ensemble.GradientBoostingRegressor()
+    gd.fit(X_train, Y_train)
+    print("done training using gradient boost regressor...")
+    return gd
 
 
 def model_stats(lm,X_validation, Y_validation):
@@ -99,6 +113,9 @@ def calc_features(dataset):
     dataset['firsthalfmonth'] = np.where(dataset['invoicedate'] < 16, 1, 0)
     paperless = {'Paper': 0, 'Electronic': 1}
     dataset['paperless'] = dataset['PaperlessBill'].map(paperless)
+    disputed = {'Yes': 1, 'No': 0}
+    dataset['disputed'] = dataset['Disputed'].map(disputed)
+
     if cust_avg_settled is None:
         cust_avg_df = pd.read_csv('avg_days.csv')
         cust_avg_settled = pd.Series(cust_avg_df.avgDaysToSettle.values, index=cust_avg_df.customerID).to_dict()
@@ -109,7 +126,7 @@ def calc_features(dataset):
         cust_dict = pd.Series(cust_map_df.code.values, index=cust_map_df.customerID).to_dict()
 
     dataset['cust'] = dataset['customerID'].map(cust_dict)
-    dataset_final = dataset[['cust', 'InvoiceAmount', 'invoicemonth', 'monthend', 'firsthalfmonth', 'paperless', 'avgDaysToSettle','DaysToSettle']]
+    dataset_final = dataset[['cust', 'InvoiceAmount', 'invoicemonth', 'monthend', 'firsthalfmonth', 'paperless', 'disputed', 'avgDaysToSettle','DaysToSettle']]
     cols = dataset_final.columns
     dataset_final[cols] = dataset_final[cols].apply(pd.to_numeric)
     return dataset_final
@@ -139,16 +156,51 @@ def predict(datafile):
     n = len(invoice_data_enriched.columns)
     x_value = array[:, 0:n - 1]
 
-    loaded_model = pickle.load(open(lr_model_file, 'rb'))
+    loaded_model = pickle.load(open(model_file, 'rb'))
     y_value = loaded_model.predict(x_value)
-    print("prediction: ")
-    print(y_value)
+    # print("prediction: ")
+    # print(y_value)
     invoice_data['predicted'] = y_value
-    print(invoice_data.head(1))
+    # print(invoice_data)
+    get_predicted_settled_sate(invoice_data)
+    build_graphs(invoice_data)
 
 
-def to_json():
-    print('json')
+def get_predicted_settled_sate(invoice_data):
+
+    invoice_data['predictedDate'] = pd.to_datetime(invoice_data.InvoiceDate) + pd.to_timedelta(pd.np.ceil(invoice_data.predicted),unit="D")
+    invoice_data['predictedDate'] = invoice_data['predictedDate'].dt.strftime('%m/%d/%Y')
+    out = invoice_data[['countryCode','customerID','invoiceNumber','InvoiceDate','DueDate','InvoiceAmount','Disputed','PaperlessBill','predictedDate']].copy()
+    print(out)
+
+
+def build_graphs(invoice_data):
+    invoice_cash=invoice_data[['predictedDate','InvoiceAmount']].copy()
+    invoice_cash = invoice_cash.sort_values(by='predictedDate')
+    invoice_cash = invoice_cash.assign(sum=invoice_cash.InvoiceAmount.cumsum())
+    # print(invoice_cash.head(2))
+    invoice_bar=invoice_data[['predicted','invoiceNumber']].copy()
+    invoice_bar['ontime'] = np.where(invoice_bar['predicted']<30,1,0)
+    invoice_bar['delayed10'] = np.where(((invoice_bar['predicted']>30) & (invoice_bar['predicted']<40)),1,0)
+    invoice_bar['delayed30'] = np.where(((invoice_bar['predicted']>40) & (invoice_bar['predicted']<60)),1,0)
+    invoice_bar['delayed30p'] = np.where((invoice_bar['predicted']>60),1,0)
+    ontime=invoice_bar['ontime'].sum()
+    delayed10=invoice_bar['delayed10'].sum()
+    delayed30=invoice_bar['delayed30'].sum()
+    delayed30p=invoice_bar['delayed30p'].sum()
+    array = invoice_cash.values
+    x = array[:, 0:1]
+    y = array[:, 2:3]
+    n = len(x)
+    x = np.reshape(x, n)
+    y = np.reshape(y, n)
+    # write as json
+    var = '{"label1": ["' + '","'.join(x) + '"' + '] ,"data1": [' + ','.join(map(str, y)) + '],'+'"data2":['+str(ontime)+','+str(delayed10)+','+str(delayed30)+','+str(delayed30p)+']}'
+    # print(var)
+    text_file = open("out.json", "w")
+    text_file.write(var)
+    text_file.close()
+    # print(invoice_bar.head(2))
 
 
 if __name__ == "__main__":

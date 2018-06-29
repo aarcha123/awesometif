@@ -2,6 +2,7 @@
 <html>
 <head>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"> </script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
   <style>
 .split {
     height: 100%;
@@ -28,12 +29,28 @@
   <canvas id="bar-chart"></canvas>
 </div>
 <script>
+
+var obj ;
+
+$.getJSON( "http://localhost:3001/out.json", function( data ) {
+    //obj=JSON.parse(data);
+    //obj=data;
+     obj = jQuery.parseJSON(JSON.stringify(data));
+
+    console.log(obj); //json output
+
+
+
+
+
+//var obj = JSON.parse('{ "label1":["week1","week2","week3","week4","week5","week6"], "data1":[200,500,1500,1700,2000,2200], "label2":["on-time", "delayed(0-10)", "delayed(10-30)", "delayed(30+)"],"data2":[10,20,8,4]}');
+
 new Chart(document.getElementById("line-chart"), {
   type: 'line',
   data: {
-    labels: ['week1','week2','week3','week4','week5','week6'],
+    labels: obj.label1,
     datasets: [{
-        data: [200,500,1500,1700,2000,2200],
+        data: obj.data1,
         label: "Amount in Dollars",
         borderColor: "#3e95cd",
         fill: false
@@ -50,12 +67,12 @@ new Chart(document.getElementById("line-chart"), {
 new Chart(document.getElementById("bar-chart"), {
     type: 'bar',
     data: {
-      labels: ["on-time", "delayed(0-10)", "delayed(10-30)", "Ldelayed(30+)"],
+      labels: ["on-time", "delayed(0-10)", "delayed(10-30)", "delayed(30+)"],
       datasets: [
         {
           label: "No of invoices",
           backgroundColor: ["#3e95cd", "#8e5ea2","#3cba9f","#e8c3b9"],
-          data: [10,20,8,4]
+          data: obj.data2
         }
       ]
     },
@@ -73,6 +90,7 @@ new Chart(document.getElementById("bar-chart"), {
         }]
     }
     }
+});
 });
 </script>
 </body>
